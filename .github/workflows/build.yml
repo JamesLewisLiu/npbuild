@@ -38,14 +38,14 @@ jobs:
             goos: linux
             os_label: linux
             arch: armv7
-          # - runner: macos-latest
-          #   goos: darwin
-          #   os_label: darwin
-          #   arch: amd64
-          # - runner: macos-latest
-          #   goos: darwin
-          #   os_label: darwin
-          #   arch: arm64
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
+            arch: amd64
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
+            arch: arm64
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -108,9 +108,9 @@ jobs:
       with:
         name: caddy-${{ matrix.os_label }}-${{ matrix.arch }}
         path: |
-          caddy*
-#          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.*
-#          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.*
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
+#          caddy*
 
   release:
     needs: build
