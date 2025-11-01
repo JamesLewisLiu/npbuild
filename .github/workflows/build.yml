@@ -84,8 +84,8 @@ jobs:
 
     - name: Build Caddy with naiveproxy
       run: |
-        OUTPUT_FILE="caddy-${{ matrix.os }}-${{ matrix.arch }}"
-        if [ "${{ matrix.os }}" = "windows" ]; then
+        OUTPUT_FILE="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+        if [ "${{ matrix.os_label }}" = "windows" ]; then
           OUTPUT_FILE="${OUTPUT_FILE}.exe"
         fi
         
