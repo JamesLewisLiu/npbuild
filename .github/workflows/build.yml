@@ -88,13 +88,13 @@ jobs:
 
     - name: Build Caddy with naiveproxy
       run: |
-        OUTPUT_FILE="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
-        if [ "${{ matrix.goos }}" = "windows" ]; then
+        OUTPUT_FILE="caddy-${{ matrix.os }}-${{ matrix.arch }}"
+        if [ "${{ matrix.os }}" = "windows" ]; then
           OUTPUT_FILE="${OUTPUT_FILE}.exe"
         fi
-
-        xcaddy build "github.com/caddyserver/caddy@${{ steps.caddy_version.outputs.CADDY_VERSION }}" \
-          --output "${OUTPUT_FILE}" \
+        
+        xcaddy build ${{ steps.caddy_version.outputs.CADDY_VERSION }} \
+          --output $OUTPUT_FILE \
           --with github.com/klzgrad/naiveproxy
       env:
         CGO_ENABLED: 0
