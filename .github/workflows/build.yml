@@ -13,12 +13,16 @@ on:
         type: boolean
         default: true
 
+env:
+  caddy_version: latest
+  use_cache: true
+  XCADDY_VERSION: v0.4.5
+
+
 permissions:
   contents: write
   actions: read
 
-env:
-  XCADDY_VERSION: v0.4.5
 
 jobs:
   build:
