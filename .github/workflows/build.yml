@@ -2,16 +2,16 @@ name: Build xcaddy with naiveproxy
 
 on:
   workflow_dispatch:
-    inputs:
-      caddy_version:
-        description: 'Caddy version'
-        required: false
-        default: 'latest'
-      use_cache:
-        description: 'Use cache'
-        required: false
-        type: boolean
-        default: true
+    # inputs:
+    #   caddy_version:
+    #     description: 'Caddy version'
+    #     required: false
+    #     default: 'latest'
+    #   use_cache:
+    #     description: 'Use cache'
+    #     required: false
+    #     type: boolean
+    #     default: true
 
 env:
   caddy_version: latest
