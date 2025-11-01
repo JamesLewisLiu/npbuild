@@ -15,26 +15,42 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: write
+  actions: read
+
 env:
   XCADDY_VERSION: v0.4.5
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - os: linux
+          - runner: ubuntu-latest
+            goos: linux
+            os_label: linux
             arch: amd64
-          - os: linux
+          - runner: ubuntu-latest
+            goos: linux
+            os_label: linux
             arch: arm64
-          - os: linux
+          - runner: ubuntu-latest
+            goos: linux
+            os_label: linux
             arch: armv7
-          - os: windows
+          - runner: windows-latest
+            goos: windows
+            os_label: windows
             arch: amd64
-          - os: darwin
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
             arch: amd64
-          - os: darwin
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
             arch: arm64
 
     steps:
@@ -48,52 +64,64 @@ jobs:
         cache: ${{ inputs.use_cache || false }}
 
     - name: Install xcaddy
-      run: |
-        go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
+      run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
 
     - name: Determine Caddy version
       id: caddy_version
       run: |
-        if [ "${{ github.event.inputs.caddy_version }}" = "latest" ] || [ -z "${{ github.event.inputs.caddy_version }}" ]; then
+        CADDY_INPUT="${{ github.event.inputs.caddy_version }}"
+        if [ "${CADDY_INPUT}" = "latest" ] || [ -z "${CADDY_INPUT}" ]; then
           CADDY_VERSION=$(curl -s "https://api.github.com/repos/caddyserver/caddy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         else
-          CADDY_VERSION="${{ github.event.inputs.caddy_version }}"
+          CADDY_VERSION="${CADDY_INPUT}"
         fi
         echo "CADDY_VERSION=${CADDY_VERSION}" >> $GITHUB_OUTPUT
         echo "Using Caddy version: ${CADDY_VERSION}"
 
+    - name: Set GO env for target
+      run: |
+        if [ "${{ matrix.arch }}" = "armv7" ]; then
+          echo "GOARCH=arm" >> $GITHUB_ENV
+          echo "GOARM=7" >> $GITHUB_ENV
+        else
+          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+        fi
+        echo "GOOS=${{ matrix.goos }}" >> $GITHUB_ENV
+      shell: bash
+
     - name: Build Caddy with naiveproxy
       run: |
-        OUTPUT_FILE="caddy-${{ matrix.os }}-${{ matrix.arch }}"
-        if [ "${{ matrix.os }}" = "windows" ]; then
+        OUTPUT_FILE="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
           OUTPUT_FILE="${OUTPUT_FILE}.exe"
         fi
-        
-        xcaddy build ${{ steps.caddy_version.outputs.CADDY_VERSION }} \
-          --output $OUTPUT_FILE \
+
+        xcaddy build "github.com/caddyserver/caddy@${{ steps.caddy_version.outputs.CADDY_VERSION }}" \
+          --output "${OUTPUT_FILE}" \
           --with github.com/klzgrad/naiveproxy
+      env:
+        CGO_ENABLED: 0
 
     - name: Create archive
       run: |
-        if [ "${{ matrix.os }}" = "windows" ]; then
-          7z a "caddy-${{ matrix.os }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os }}-${{ matrix.arch }}.exe"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          7z a "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe"
         else
-          tar czf "caddy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os }}-${{ matrix.arch }}"
+          tar czf "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
         fi
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: caddy-${{ matrix.os }}-${{ matrix.arch }}
+        name: caddy-${{ matrix.os_label }}-${{ matrix.arch }}
         path: |
-          caddy-${{ matrix.os }}-${{ matrix.arch }}.*
-          caddy-${{ matrix.os }}-${{ matrix.arch }}.exe
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.*
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    
     steps:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
@@ -109,3 +137,5 @@ jobs:
         files: |
           ./artifacts/**/caddy-*
         generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
