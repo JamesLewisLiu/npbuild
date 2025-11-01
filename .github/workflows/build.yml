@@ -12,18 +12,10 @@ on:
     #     required: false
     #     type: boolean
     #     default: true
-
 env:
   caddy_version: latest
   use_cache: true
   XCADDY_VERSION: v0.4.5
-
-
-permissions:
-  contents: write
-  actions: read
-
-
 jobs:
   build:
     runs-on: ${{ matrix.runner }}
@@ -54,7 +46,6 @@ jobs:
             goos: darwin
             os_label: darwin
             arch: arm64
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
