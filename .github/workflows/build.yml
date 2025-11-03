@@ -48,10 +48,10 @@ jobs:
             goos: darwin
             os_label: darwin
             arch: arm64
-          - runner: windows-latest
-            goos: windows
-            os_label: windows
-            arch: amd64
+          # - runner: windows-latest
+          #   goos: windows
+          #   os_label: windows
+          #   arch: amd64
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
