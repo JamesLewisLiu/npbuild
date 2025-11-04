@@ -101,13 +101,13 @@ jobs:
       env:
         CGO_ENABLED: 0
 
-    - name: Create archive
-      run: |
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          7z a "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe"
-        else
-          tar czf "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
-        fi
+    # - name: Create archive
+    #   run: |
+    #     if [ "${{ matrix.goos }}" = "windows" ]; then
+    #       7z a "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe"
+    #     else
+    #       tar czf "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+    #     fi
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
