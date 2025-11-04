@@ -114,8 +114,8 @@ jobs:
       with:
         name: caddy-${{ matrix.os_label }}-${{ matrix.arch }}
         path: |
-          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.*
-          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}*
+#          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
 #          caddy*
 
   release:
