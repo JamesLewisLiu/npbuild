@@ -1,0 +1,128 @@
+name: Build xcaddy with naiveproxy (macOS)
+
+on:
+  push:
+    branches: [ "macos" ]
+  pull_request:
+    branches: [ "macos" ]
+  schedule:
+  - cron: "0 12 15 * *"    
+  workflow_dispatch:
+    # inputs:
+    #   caddy_version:
+    #     description: 'Caddy version'
+    #     required: false
+    #     default: 'latest'
+    #   use_cache:
+    #     description: 'Use cache'
+    #     required: false
+    #     type: boolean
+    #     default: true
+env:
+  caddy_version: latest
+  use_cache: true
+  XCADDY_VERSION: v0.4.5
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
+            arch: amd64
+          - runner: macos-latest
+            goos: darwin
+            os_label: darwin
+            arch: arm64
+          # - runner: windows-latest
+          #   goos: windows
+          #   os_label: windows
+          #   arch: amd64
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: ${{ inputs.use_cache || false }}
+
+    - name: Install xcaddy
+      run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
+
+    - name: Determine Caddy version
+      id: caddy_version
+      run: |
+        CADDY_INPUT="${{ github.event.inputs.caddy_version }}"
+        if [ "${CADDY_INPUT}" = "latest" ] || [ -z "${CADDY_INPUT}" ]; then
+          CADDY_VERSION=$(curl -s "https://api.github.com/repos/caddyserver/caddy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        else
+          CADDY_VERSION="${CADDY_INPUT}"
+        fi
+        echo "CADDY_VERSION=${CADDY_VERSION}" >> $GITHUB_OUTPUT
+        echo "Using Caddy version: ${CADDY_VERSION}"
+
+    - name: Set GO env for target
+      run: |
+        if [ "${{ matrix.arch }}" = "armv7" ]; then
+          echo "GOARCH=arm" >> $GITHUB_ENV
+          echo "GOARM=7" >> $GITHUB_ENV
+        else
+          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+        fi
+        echo "GOOS=${{ matrix.goos }}" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Build Caddy with naiveproxy
+      run: |
+        OUTPUT_FILE="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+        if [ "${{ matrix.os_label }}" = "windows" ]; then
+          OUTPUT_FILE="${OUTPUT_FILE}.exe"
+        fi
+        
+        xcaddy build ${{ steps.caddy_version.outputs.CADDY_VERSION }} \
+          --output $OUTPUT_FILE \
+          --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
+      env:
+        CGO_ENABLED: 0
+
+    - name: Create archive
+      run: |
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          7z a "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe"
+        else
+          tar czf "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: caddy-${{ matrix.os_label }}-${{ matrix.arch }}
+        path: |
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.*
+          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
+#          caddy*
+
+  # release:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Download all artifacts
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       path: ./artifacts
+
+  #   - name: List files
+  #     run: find ./artifacts -type f
+
+  #   - name: Create Release
+  #     uses: softprops/action-gh-release@v1
+  #     with:
+  #       files: |
+  #         ./artifacts/**/caddy-*
+  #       generate_release_notes: true
+  #     env:
+  #       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
