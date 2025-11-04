@@ -40,14 +40,14 @@ jobs:
             goos: linux
             os_label: linux
             arch: armv7
-          - runner: macos-latest
-            goos: darwin
-            os_label: darwin
-            arch: amd64
-          - runner: macos-latest
-            goos: darwin
-            os_label: darwin
-            arch: arm64
+          # - runner: macos-latest
+          #   goos: darwin
+          #   os_label: darwin
+          #   arch: amd64
+          # - runner: macos-latest
+          #   goos: darwin
+          #   os_label: darwin
+          #   arch: arm64
           # - runner: windows-latest
           #   goos: windows
           #   os_label: windows
