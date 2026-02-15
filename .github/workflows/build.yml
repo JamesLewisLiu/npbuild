@@ -2,30 +2,30 @@ name: Build xcaddy with naiveproxy
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  schedule:
-  - cron: "0 12 15 * *"    
+    tags:
+      - 'v*'
   workflow_dispatch:
-    # inputs:
-    #   caddy_version:
-    #     description: 'Caddy version'
-    #     required: false
-    #     default: 'latest'
-    #   use_cache:
-    #     description: 'Use cache'
-    #     required: false
-    #     type: boolean
-    #     default: true
+    inputs:
+      caddy_version:
+        description: 'Caddy version (leave empty for latest)'
+        required: false
+        default: ''
+
+# 全局权限设置：默认只读，Release Job 单独提权
+permissions:
+  contents: read
+
 env:
-  caddy_version: latest
-  use_cache: true
   XCADDY_VERSION: v0.4.5
+  # 设置 Go 编译参数，减小体积
+  GO_FLAGS: "-ldflags='-s -w'" 
+
 jobs:
   build:
+    name: Build ${{ matrix.os_label }}/${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
@@ -40,102 +40,111 @@ jobs:
             goos: linux
             os_label: linux
             arch: armv7
-          # - runner: macos-latest
-          #   goos: darwin
-          #   os_label: darwin
-          #   arch: amd64
-          # - runner: macos-latest
-          #   goos: darwin
-          #   os_label: darwin
-          #   arch: arm64
-          # - runner: windows-latest
-          #   goos: windows
-          #   os_label: windows
-          #   arch: amd64
+            # 如果需要 Windows/Mac 支持，取消下面的注释即可
+            # - runner: windows-latest
+            #   goos: windows
+            #   os_label: windows
+            #   arch: amd64
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        cache: ${{ inputs.use_cache || false }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23' # 使用更现代的 Go 版本
+          check-latest: true
+          cache: true
 
-    - name: Install xcaddy
-      run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
 
-    - name: Determine Caddy version
-      id: caddy_version
-      run: |
-        CADDY_INPUT="${{ github.event.inputs.caddy_version }}"
-        if [ "${CADDY_INPUT}" = "latest" ] || [ -z "${CADDY_INPUT}" ]; then
-          CADDY_VERSION=$(curl -s "https://api.github.com/repos/caddyserver/caddy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        else
-          CADDY_VERSION="${CADDY_INPUT}"
-        fi
-        echo "CADDY_VERSION=${CADDY_VERSION}" >> $GITHUB_OUTPUT
-        echo "Using Caddy version: ${CADDY_VERSION}"
+      - name: Resolve Caddy Version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 优先使用输入版本，否则通过 GitHub CLI 获取最新 Release Tag
+          INPUT_VER="${{ inputs.caddy_version }}"
+          if [ -z "$INPUT_VER" ] || [ "$INPUT_VER" == "latest" ]; then
+            CADDY_VER=$(gh api repos/caddyserver/caddy/releases/latest --jq .tag_name)
+          else
+            CADDY_VER=$INPUT_VER
+          fi
+          echo "Target Caddy Version: $CADDY_VER"
+          echo "caddy_version=$CADDY_VER" >> $GITHUB_OUTPUT
 
-    - name: Set GO env for target
-      run: |
-        if [ "${{ matrix.arch }}" = "armv7" ]; then
-          echo "GOARCH=arm" >> $GITHUB_ENV
-          echo "GOARM=7" >> $GITHUB_ENV
-        else
-          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
-        fi
-        echo "GOOS=${{ matrix.goos }}" >> $GITHUB_ENV
-      shell: bash
+      - name: Configure Cross-Compile
+        run: |
+          echo "GOOS=${{ matrix.goos }}" >> $GITHUB_ENV
+          if [ "${{ matrix.arch }}" = "armv7" ]; then
+            echo "GOARCH=arm" >> $GITHUB_ENV
+            echo "GOARM=7" >> $GITHUB_ENV
+          else
+            echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+          fi
 
-    - name: Build Caddy with naiveproxy
-      run: |
-        OUTPUT_FILE="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
-        if [ "${{ matrix.os_label }}" = "windows" ]; then
-          OUTPUT_FILE="${OUTPUT_FILE}.exe"
-        fi
-        
-        xcaddy build ${{ steps.caddy_version.outputs.CADDY_VERSION }} \
-          --output $OUTPUT_FILE \
-          --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
-      env:
-        CGO_ENABLED: 0
+      - name: Build Caddy (Naiveproxy)
+        run: |
+          FILENAME="caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
+          [ "${{ matrix.goos }}" = "windows" ] && FILENAME="${FILENAME}.exe"
+          
+          # 使用 xcaddy 构建
+          xcaddy build ${{ steps.version.outputs.caddy_version }} \
+            --output "$FILENAME" \
+            --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
+        env:
+          CGO_ENABLED: 0
 
-    # - name: Create archive
-    #   run: |
-    #     if [ "${{ matrix.goos }}" = "windows" ]; then
-    #       7z a "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.zip" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe"
-    #     else
-    #       tar czf "caddy-${{ matrix.os_label }}-${{ matrix.arch }}.tar.gz" "caddy-${{ matrix.os_label }}-${{ matrix.arch }}"
-    #     fi
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: caddy-${{ matrix.os_label }}-${{ matrix.arch }}
-        path: |
-          caddy-${{ matrix.os_label }}-${{ matrix.arch }}*
-#          caddy-${{ matrix.os_label }}-${{ matrix.arch }}.exe
-#          caddy*
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os_label }}-${{ matrix.arch }}
+          path: caddy-*
+          if-no-files-found: error
+          retention-days: 1
 
   release:
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write  # 允许创建 Release 和 Tag
     steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: ./artifacts
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./dist
+          merge-multiple: true # v4 新特性：自动合并所有文件到同一目录，不再嵌套文件夹
 
-    - name: List files
-      run: find ./artifacts -type f
+      - name: Generate Release Tag
+        id: tag_logic
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # 手动触发：生成 时间戳 (Epoch)
+            EPOCH=$(date +%s)
+            TAG_NAME="${EPOCH}"
+            echo "Mode: Manual Trigger"
+            echo "Generate Title: Manual Build ${EPOCH}"
+            echo "release_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+            echo "release_title=Manual Build ${EPOCH}" >> $GITHUB_OUTPUT
+          else
+            # Push Tag 触发：使用原有 Tag
+            REF_TAG=${GITHUB_REF#refs/tags/}
+            echo "Mode: Tag Trigger"
+            echo "release_tag=${REF_TAG}" >> $GITHUB_OUTPUT
+            echo "release_title=${REF_TAG}" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          ./artifacts/**/caddy-*
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_logic.outputs.release_tag }}
+          name: ${{ steps.tag_logic.outputs.release_title }}
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
